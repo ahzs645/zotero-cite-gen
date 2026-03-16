@@ -75,3 +75,18 @@ jobs:
             --notes "Automated release for version ${{ steps.version.outputs.version }}." \
             --target "${GITHUB_SHA}" \
             --latest
+
+      - name: Update existing GitHub release assets and mark as latest
+        if: github.ref == 'refs/heads/main' && steps.release_check.outputs.exists == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${{ steps.version.outputs.tag }}" \
+            .scaffold/build/zotero-citation-generator.xpi \
+            .scaffold/build/addon/manifest.json \
+            --clobber
+
+          gh release edit "${{ steps.version.outputs.tag }}" \
+            --title "${{ steps.version.outputs.tag }}" \
+            --notes "Automated release for version ${{ steps.version.outputs.version }}." \
+            --latest
