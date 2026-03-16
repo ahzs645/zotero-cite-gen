@@ -1,0 +1,259 @@
+<?xml version="1.0"?>
+<?xml-stylesheet href="chrome://global/skin/" type="text/css"?>
+<?xml-stylesheet href="chrome://zotero/skin/zotero.css" type="text/css"?>
+<?xml-stylesheet href="chrome://zotero-platform/content/zotero.css" type="text/css"?>
+<!DOCTYPE window>
+<window
+  xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
+  xmlns:xul="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
+  xmlns:html="http://www.w3.org/1999/xhtml"
+  id="citegen-import-dialog"
+  title="Import AI Citations"
+  windowtype="citegen:import"
+  width="820"
+  height="620"
+  persist="screenX screenY width height"
+>
+  <script src="chrome://zotero/content/include.js"/>
+
+  <html:style>
+    #citegen-root { font-family: -apple-system, BlinkMacSystemFont, sans-serif; font-size: 13px; padding: 12px; display: flex; flex-direction: column; height: 100%; gap: 8px; overflow: hidden; }
+    #citegen-root label.cg-label { font-weight: 600; font-size: 13px; display: block; margin-bottom: 4px; }
+    #cg-input { width: 100%; min-height: 90px; max-height: 160px; font-family: monospace; font-size: 11px; border: 1px solid #c4c4c4; border-radius: 6px; padding: 8px; resize: vertical; box-sizing: border-box; }
+    .cg-btn-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+    .cg-btn { padding: 5px 14px; border-radius: 6px; border: 1px solid #c4c4c4; background: #fff; cursor: pointer; font-size: 12px; font-weight: 500; }
+    .cg-btn:hover { background: #f0f0f0; }
+    .cg-btn:disabled { opacity: 0.4; }
+    .cg-btn-primary { background: #2563eb; color: #fff; border-color: #2563eb; }
+    .cg-btn-primary:hover { background: #1d4ed8; }
+    .cg-opts { display: flex; gap: 12px; font-size: 11px; flex-wrap: wrap; }
+    .cg-opts label { display: inline-flex; align-items: center; gap: 3px; cursor: pointer; font-weight: normal; }
+    .cg-spacer { flex: 1; }
+    #cg-status { font-size: 12px; padding: 6px 10px; border-radius: 6px; min-height: 24px; }
+    .cg-s-info { background: #dbeafe; color: #1e40af; }
+    .cg-s-err { background: #fee2e2; color: #991b1b; }
+    .cg-s-ok { background: #dcfce7; color: #166534; }
+    .cg-s-warn { background: #fef3c7; color: #92400e; }
+    #cg-summary { font-size: 11px; color: #666; }
+    .cg-tbl-wrap { flex: 1; overflow: auto; border: 1px solid #e2e8f0; border-radius: 6px; background: #fff; }
+    #cg-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+    #cg-table th { text-align: left; padding: 6px 8px; background: #f1f5f9; border-bottom: 2px solid #e2e8f0; font-size: 10px; text-transform: uppercase; letter-spacing: .04em; color: #64748b; position: sticky; top: 0; }
+    #cg-table td { padding: 5px 8px; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
+    #cg-table tr:hover td { background: #f8fafc; }
+  </html:style>
+
+  <html:div id="citegen-root">
+    <html:div>
+      <html:label class="cg-label">Paste your AI-generated JSON below:</html:label>
+      <html:textarea id="cg-input" placeholder='{"query":"topic","citations":[{"title":"...","authors":["..."],"year":2023,"doi":"...","reason":"..."}]}'/>
+    </html:div>
+
+    <html:div class="cg-btn-row">
+      <html:button id="cg-preview" class="cg-btn">Preview</html:button>
+      <html:button id="cg-browse" class="cg-btn">Browse File...</html:button>
+      <html:button id="cg-verify" class="cg-btn" disabled="disabled">Verify DOIs</html:button>
+      <html:span class="cg-spacer"/>
+      <html:span style="font-size:12px;">Into: </html:span>
+      <html:select id="cg-coll"><html:option value="">My Library</html:option></html:select>
+      <html:button id="cg-import" class="cg-btn cg-btn-primary" disabled="disabled">Import to Zotero</html:button>
+    </html:div>
+
+    <html:div class="cg-opts">
+      <html:label><html:input type="checkbox" id="opt-verify" checked="checked"/> Verify DOIs</html:label>
+      <html:label><html:input type="checkbox" id="opt-s2" checked="checked"/> Semantic Scholar</html:label>
+      <html:label><html:input type="checkbox" id="opt-resolve" checked="checked"/> Resolve URLs</html:label>
+      <html:label><html:input type="checkbox" id="opt-dedup" checked="checked"/> Check duplicates</html:label>
+      <html:label><html:input type="checkbox" id="opt-skip-dup"/> Skip duplicates</html:label>
+      <html:label><html:input type="checkbox" id="opt-notes" checked="checked"/> Attach reasons</html:label>
+      <html:label><html:input type="checkbox" id="opt-link" checked="checked"/> Link related</html:label>
+      <html:label><html:input type="checkbox" id="opt-litmap" checked="checked"/> Lit map</html:label>
+    </html:div>
+
+    <html:div id="cg-status" class="cg-s-info">Ready. Paste JSON and click Preview.</html:div>
+    <html:div id="cg-summary"/>
+
+    <html:div class="cg-tbl-wrap">
+      <html:table id="cg-table">
+        <html:thead>
+          <html:tr>
+            <html:th>#</html:th>
+            <html:th>Title</html:th>
+            <html:th>Authors</html:th>
+            <html:th>Year</html:th>
+            <html:th>Source</html:th>
+            <html:th>Status</html:th>
+            <html:th>Reason</html:th>
+          </html:tr>
+        </html:thead>
+        <html:tbody id="cg-tbody"/>
+      </html:table>
+    </html:div>
+  </html:div>
+
+  <script><![CDATA[
+    var controller = null;
+    try {
+      if (window.arguments && window.arguments[0] && window.arguments[0].controller) {
+        controller = window.arguments[0].controller;
+      } else if (Zotero && Zotero.CiteGen) {
+        controller = Zotero.CiteGen.createImportController();
+      }
+    } catch(e) {
+      try { controller = Zotero.CiteGen.createImportController(); } catch(e2) {}
+    }
+
+    var currentPayload = null;
+    var doc = document;
+
+    // Populate collections
+    try {
+      var sel = doc.getElementById("cg-coll");
+      var colls = Zotero.Collections.getByLibrary(Zotero.Libraries.userLibraryID);
+      for (var i = 0; i < colls.length; i++) {
+        var o = doc.createElementNS("http://www.w3.org/1999/xhtml", "option");
+        o.value = String(colls[i].id);
+        o.textContent = colls[i].name;
+        sel.appendChild(o);
+      }
+    } catch(e) {}
+
+    function setStatus(msg, type) {
+      var bar = doc.getElementById("cg-status");
+      bar.textContent = msg;
+      bar.className = "cg-s-" + (type || "info");
+    }
+
+    function trunc(s, n) { return s.length > n ? s.substring(0, n - 1) + "\u2026" : s; }
+
+    function makeCell(text, attrs) {
+      var td = doc.createElementNS("http://www.w3.org/1999/xhtml", "td");
+      td.textContent = text;
+      if (attrs) { for (var k in attrs) td.setAttribute(k, attrs[k]); }
+      return td;
+    }
+
+    // Preview
+    doc.getElementById("cg-preview").addEventListener("click", function() {
+      var raw = doc.getElementById("cg-input").value;
+      if (!raw.trim()) { setStatus("Paste some JSON first.", "err"); return; }
+      if (!controller) { setStatus("Plugin controller not loaded.", "err"); return; }
+
+      var result = controller.parseInput(raw);
+      if (!result.success) { setStatus(result.error, "err"); return; }
+
+      currentPayload = result.payload;
+      var cits = result.payload.citations;
+      var warns = result.warnings || [];
+      var withDOI = 0, withURL = 0;
+      for (var i = 0; i < cits.length; i++) { if (cits[i].doi) withDOI++; else if (cits[i].url) withURL++; }
+
+      var tbody = doc.getElementById("cg-tbody");
+      while (tbody.firstChild) tbody.removeChild(tbody.firstChild);
+
+      for (var j = 0; j < cits.length; j++) {
+        var c = cits[j];
+        var src = c.doi ? "DOI" : (c.url ? (c.url.indexOf("arxiv") >= 0 ? "arXiv" : "URL") : "None");
+        var tr = doc.createElementNS("http://www.w3.org/1999/xhtml", "tr");
+        tr.appendChild(makeCell(String(j + 1)));
+        tr.appendChild(makeCell(trunc(c.title, 55)));
+        tr.appendChild(makeCell(trunc((c.authors || []).join(", ") || "Unknown", 30)));
+        tr.appendChild(makeCell(c.year ? String(c.year) : "\u2014"));
+        tr.appendChild(makeCell(src));
+        var statusCell = makeCell(c.doi ? "Pending" : (c.url ? "URL only" : "No link"), {id: "vs-" + j});
+        statusCell.style.color = c.doi ? "#d97706" : "#9ca3af";
+        tr.appendChild(statusCell);
+        tr.appendChild(makeCell(trunc(c.reason || "\u2014", 45)));
+        tbody.appendChild(tr);
+      }
+
+      doc.getElementById("cg-summary").textContent = cits.length + " citation(s) | " + withDOI + " DOI | " + withURL + " URL-only";
+      setStatus(warns.length > 0 ? "Warnings: " + warns.slice(0, 2).join("; ") : "Parsed " + cits.length + " citation(s). Ready.", warns.length > 0 ? "warn" : "ok");
+      doc.getElementById("cg-verify").disabled = false;
+      doc.getElementById("cg-import").disabled = false;
+    });
+
+    // Verify DOIs
+    doc.getElementById("cg-verify").addEventListener("click", async function() {
+      if (!controller || !currentPayload) return;
+      this.disabled = true;
+      setStatus("Verifying DOIs...", "info");
+      try {
+        var results = await controller.verifyDOIs(function(cur, tot, res) {
+          setStatus("Verifying DOIs (" + cur + "/" + tot + ")...", "info");
+          var cits = currentPayload.citations;
+          for (var k = 0; k < cits.length; k++) {
+            if (cits[k].doi === res.doi) {
+              var cell = doc.getElementById("vs-" + k);
+              if (cell) { cell.textContent = res.valid ? "Verified" : "Not found"; cell.style.color = res.valid ? "#16a34a" : "#dc2626"; cell.style.fontWeight = "600"; }
+              break;
+            }
+          }
+        });
+        var valid = 0, invalid = 0;
+        for (var r = 0; r < results.length; r++) { if (results[r].valid) valid++; else invalid++; }
+        setStatus("DOI check: " + valid + " valid, " + invalid + " not found", valid > 0 ? "ok" : "err");
+      } catch(e) { setStatus("Error: " + e.message, "err"); }
+      this.disabled = false;
+    });
+
+    // Import
+    doc.getElementById("cg-import").addEventListener("click", async function() {
+      if (!controller || !currentPayload) return;
+      this.disabled = true;
+      doc.getElementById("cg-verify").disabled = true;
+
+      var collVal = doc.getElementById("cg-coll").value;
+      var opts = {
+        collectionID: collVal ? parseInt(collVal) : undefined,
+        verifyDOIs: doc.getElementById("opt-verify").checked,
+        useSemanticScholar: doc.getElementById("opt-s2").checked,
+        resolveURLs: doc.getElementById("opt-resolve").checked,
+        checkDuplicates: doc.getElementById("opt-dedup").checked,
+        skipDuplicates: doc.getElementById("opt-skip-dup").checked,
+        attachReasons: doc.getElementById("opt-notes").checked,
+        linkRelated: doc.getElementById("opt-link").checked,
+        createLitMap: doc.getElementById("opt-litmap").checked,
+      };
+
+      var labels = {resolve:"Resolving URLs", verify:"Verifying DOIs", "s2-verify":"Semantic Scholar", duplicates:"Checking duplicates", "import":"Importing", notes:"Creating notes", linking:"Linking", litmap:"Lit map"};
+
+      try {
+        var results = await controller.runImport(opts, function(stage, cur, tot, detail) {
+          setStatus((labels[stage] || stage) + " (" + cur + "/" + tot + ")" + (detail ? " - " + detail : ""), "info");
+        });
+        var imported = 0, skipped = 0;
+        for (var i = 0; i < results.length; i++) { if (results[i].skipped) skipped++; else imported++; }
+        setStatus("Done! Imported " + imported + " item(s)." + (skipped > 0 ? " Skipped " + skipped + " duplicate(s)." : ""), "ok");
+        doc.getElementById("cg-summary").textContent = "Imported " + imported + " citation(s)" + (skipped > 0 ? ", skipped " + skipped + " dup(s)" : "");
+
+        for (var j = 0; j < results.length; j++) {
+          var cell = doc.getElementById("vs-" + j);
+          if (!cell) continue;
+          if (results[j].skipped) { cell.textContent = "Skipped"; cell.style.color = "#dc2626"; }
+          else if (results[j].confidence) {
+            var cf = results[j].confidence;
+            cell.textContent = cf.level + " (" + cf.score + ")";
+            cell.style.color = cf.level === "high" ? "#16a34a" : (cf.level === "medium" ? "#d97706" : "#dc2626");
+            cell.style.fontWeight = "600";
+          }
+        }
+      } catch(e) { setStatus("Error: " + e.message, "err"); }
+      this.disabled = false;
+      doc.getElementById("cg-verify").disabled = false;
+    });
+
+    // Browse file
+    doc.getElementById("cg-browse").addEventListener("click", async function() {
+      try {
+        var fp = Components.classes["@mozilla.org/filepicker;1"].createInstance(Components.interfaces.nsIFilePicker);
+        fp.init(window, "Select JSON File", Components.interfaces.nsIFilePicker.modeOpen);
+        fp.appendFilter("JSON Files", "*.json");
+        var rv = await new Promise(function(resolve) { fp.open(resolve); });
+        if (rv === Components.interfaces.nsIFilePicker.returnOK) {
+          doc.getElementById("cg-input").value = await Zotero.File.getContentsAsync(fp.file.path);
+          doc.getElementById("cg-preview").click();
+        }
+      } catch(e) { setStatus("File error: " + e.message, "err"); }
+    });
+  ]]></script>
+</window>

@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "module": "ESNext",
+    "target": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "noImplicitAny": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "outDir": ".scaffold/build/addon/content/scripts",
+    "rootDir": "src",
+    "baseUrl": ".",
+    "paths": {
+      "zotero-plugin-toolkit": ["node_modules/zotero-plugin-toolkit/dist/index.d.ts"]
+    }
+  },
+  "include": ["src/**/*.ts", "typings/**/*.d.ts"]
+}

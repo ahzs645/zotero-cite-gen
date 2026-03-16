@@ -1,0 +1,101 @@
+<?xml version="1.0"?>
+<?xml-stylesheet href="chrome://global/skin/" type="text/css"?>
+<?xml-stylesheet href="chrome://zotero/skin/zotero.css" type="text/css"?>
+<?xml-stylesheet href="chrome://zotero-platform/content/zotero.css" type="text/css"?>
+<!DOCTYPE window>
+<window
+  xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
+  xmlns:xul="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
+  xmlns:html="http://www.w3.org/1999/xhtml"
+  id="citegen-prompt-dialog"
+  title="AI Citation Prompt"
+  windowtype="citegen:prompt"
+  width="650"
+  height="520"
+  persist="screenX screenY width height"
+>
+  <script src="chrome://zotero/content/include.js"/>
+
+  <html:style>
+    #cg-prompt-root { font-family: -apple-system, BlinkMacSystemFont, sans-serif; font-size: 13px; padding: 12px; display: flex; flex-direction: column; height: 100%; gap: 10px; }
+    .cg-desc { color: #475569; margin: 0; }
+    .cg-form-row { display: flex; gap: 8px; align-items: center; }
+    .cg-form-row label { font-weight: 600; min-width: 55px; }
+    .cg-form-row input { flex: 1; padding: 6px 8px; border: 1px solid #c4c4c4; border-radius: 6px; font-size: 13px; }
+    #cg-prompt-out { flex: 1; width: 100%; font-family: monospace; font-size: 11px; border: 1px solid #c4c4c4; border-radius: 6px; padding: 8px; resize: none; box-sizing: border-box; }
+    .cg-btn-row { display: flex; gap: 8px; justify-content: flex-end; align-items: center; }
+    .cg-pbtn { padding: 6px 16px; border-radius: 6px; border: 1px solid #c4c4c4; background: #fff; cursor: pointer; font-size: 13px; }
+    .cg-pbtn-primary { background: #2563eb; color: #fff; border-color: #2563eb; }
+    .cg-pbtn-primary:hover { background: #1d4ed8; }
+    #cg-copy-ok { font-size: 12px; color: #16a34a; opacity: 0; transition: opacity 0.3s; }
+  </html:style>
+
+  <html:div id="cg-prompt-root">
+    <html:p class="cg-desc">Give this prompt to your AI (ChatGPT, Claude, etc). Then paste the JSON output back into the Citation Importer.</html:p>
+
+    <html:div class="cg-form-row">
+      <html:label>Topic:</html:label>
+      <html:input id="cg-topic" type="text" placeholder="e.g. transformer models in NLP"/>
+    </html:div>
+    <html:div class="cg-form-row">
+      <html:label>Focus:</html:label>
+      <html:input id="cg-focus" type="text" placeholder="e.g. seminal papers and recent surveys"/>
+    </html:div>
+    <html:div class="cg-form-row">
+      <html:label>Count:</html:label>
+      <html:input id="cg-count" type="number" value="10" min="1" max="50" style="max-width:80px;"/>
+    </html:div>
+
+    <html:textarea id="cg-prompt-out" readonly="readonly"/>
+
+    <html:div class="cg-btn-row">
+      <html:span id="cg-copy-ok">Copied!</html:span>
+      <html:button id="cg-regen" class="cg-pbtn">Regenerate</html:button>
+      <html:button id="cg-copy" class="cg-pbtn cg-pbtn-primary">Copy to Clipboard</html:button>
+    </html:div>
+  </html:div>
+
+  <script><![CDATA[
+    var promptBuilder = null;
+    try {
+      if (window.arguments && window.arguments[0] && window.arguments[0].buildFullPrompt) {
+        promptBuilder = window.arguments[0].buildFullPrompt;
+      } else if (Zotero && Zotero.CiteGen) {
+        promptBuilder = Zotero.CiteGen.buildFullPrompt.bind(Zotero.CiteGen);
+      }
+    } catch(e) {
+      try { promptBuilder = Zotero.CiteGen.buildFullPrompt.bind(Zotero.CiteGen); } catch(e2) {}
+    }
+
+    var doc = document;
+
+    function gen() {
+      if (!promptBuilder) { doc.getElementById("cg-prompt-out").value = "Error: prompt builder not available."; return; }
+      var topic = doc.getElementById("cg-topic").value.trim() || undefined;
+      var focus = doc.getElementById("cg-focus").value.trim() || undefined;
+      var count = parseInt(doc.getElementById("cg-count").value) || 10;
+      doc.getElementById("cg-prompt-out").value = promptBuilder(topic, focus, count);
+    }
+
+    doc.getElementById("cg-regen").addEventListener("click", gen);
+    doc.getElementById("cg-topic").addEventListener("input", gen);
+    doc.getElementById("cg-focus").addEventListener("input", gen);
+    doc.getElementById("cg-count").addEventListener("input", gen);
+
+    doc.getElementById("cg-copy").addEventListener("click", function() {
+      var text = doc.getElementById("cg-prompt-out").value;
+      if (!text) return;
+      try {
+        var ch = Components.classes["@mozilla.org/widget/clipboardhelper;1"].getService(Components.interfaces.nsIClipboardHelper);
+        ch.copyString(text);
+      } catch(e) {
+        navigator.clipboard.writeText(text);
+      }
+      var ok = doc.getElementById("cg-copy-ok");
+      ok.style.opacity = "1";
+      setTimeout(function() { ok.style.opacity = "0"; }, 2000);
+    });
+
+    gen();
+  ]]></script>
+</window>

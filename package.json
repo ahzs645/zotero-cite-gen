@@ -1,0 +1,44 @@
+{
+  "name": "zotero-cite-gen",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Import AI-generated citations from JSON, verify DOIs, and map reasoning into Zotero notes",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ahmadjalil/zotero-cite-gen.git"
+  },
+  "config": {
+    "addonName": "Zotero Citation Generator",
+    "addonID": "cite-gen@zotero.org",
+    "addonRef": "citegen",
+    "addonInstance": "CiteGen",
+    "prefsPrefix": "extensions.zotero.citegen"
+  },
+  "scripts": {
+    "start": "zotero-plugin serve",
+    "build": "tsc --noEmit && zotero-plugin build",
+    "release": "zotero-plugin release",
+    "lint": "prettier --write . && eslint --fix .",
+    "test": "mocha"
+  },
+  "dependencies": {
+    "zotero-plugin-toolkit": "^4.0.6"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "zotero-plugin-scaffold": "^0.8.4",
+    "zotero-types": "^3.1.0",
+    "prettier": "^3.2.0",
+    "eslint": "^8.57.0",
+    "@typescript-eslint/parser": "^7.0.0",
+    "@typescript-eslint/eslint-plugin": "^7.0.0"
+  },
+  "prettier": {
+    "printWidth": 80,
+    "tabWidth": 2,
+    "endOfLine": "lf",
+    "semi": true,
+    "singleQuote": false,
+    "trailingComma": "all"
+  }
+}
