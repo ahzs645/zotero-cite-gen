@@ -77,7 +77,7 @@ export class ImportDialogController {
       checkDuplicates: options.checkDuplicates ?? true,
       skipDuplicates: options.skipDuplicates ?? false,
       attachReasons: options.attachReasons ?? getPref("attachReason"),
-      linkRelated: options.linkRelated ?? true,
+      linkRelated: options.linkRelated ?? false,
       createLitMap: options.createLitMap ?? true,
       importTag: options.importTag ??
         (getPref("tagImported") ? (getPref("importTag") as string) : undefined),
@@ -102,8 +102,8 @@ function getPref(key: string): any {
     const defaults: Record<string, any> = {
       verifyDOI: true,
       attachReason: true,
-      tagImported: true,
-      importTag: "ai-citation",
+      tagImported: false,
+      importTag: "",
     };
     return defaults[key];
   }

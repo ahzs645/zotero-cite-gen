@@ -38,7 +38,7 @@ function buildNoteHTML(citation: AICitation, query?: string): string {
     ) as string;
   } catch {
     template =
-      '<h2>AI Citation Reason</h2><p><strong>Query:</strong> {{query}}</p><p><strong>Reason:</strong> {{reason}}</p><p><em>Imported on {{date}}</em></p>';
+      '<h2>Citation Reason</h2><p><strong>Query:</strong> {{query}}</p><p><strong>Reason:</strong> {{reason}}</p><p><em>Imported on {{date}}</em></p>';
   }
 
   const now = new Date().toISOString().split("T")[0];

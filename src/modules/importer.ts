@@ -197,7 +197,7 @@ export async function importCitations(
     checkDuplicates = true,
     skipDuplicates = false,
     attachReasons = true,
-    linkRelated = true,
+    linkRelated = false,
     createLitMap = true,
     importTag,
     query,

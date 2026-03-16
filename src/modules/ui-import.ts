@@ -138,7 +138,7 @@ function buildImportUI(win: Window, controller: ImportDialogController) {
     ["dedup", "Check duplicates", true],
     ["skip-dup", "Skip duplicates", false],
     ["notes", "Attach reasons", true],
-    ["link", "Link related", true],
+    ["link", "Link related", false],
     ["litmap", "Lit map", true],
   ];
   const optionsRow = h(doc, "div", {

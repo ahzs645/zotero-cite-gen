@@ -13,6 +13,11 @@ import { importCitations } from "./modules/importer";
 import { openImportDialog } from "./modules/ui-import";
 import { openPromptDialog } from "./modules/ui-prompt";
 
+const OLD_NOTE_TEMPLATE =
+  "<h2>AI Citation Reason</h2><p><strong>Query:</strong> {{query}}</p><p><strong>Reason:</strong> {{reason}}</p><p><em>Imported on {{date}}</em></p>";
+const NEW_NOTE_TEMPLATE =
+  "<h2>Citation Reason</h2><p><strong>Query:</strong> {{query}}</p><p><strong>Reason:</strong> {{reason}}</p><p><em>Imported on {{date}}</em></p>";
+
 class CiteGenPlugin {
   private id: string = "";
   private version: string = "";
@@ -31,6 +36,8 @@ class CiteGenPlugin {
       pluginID: this.id,
       src: this.rootURI + "content/preferences.xhtml",
     });
+
+    this.migrateLegacyPrefs();
 
     this.initialized = true;
     Zotero.debug(`[CiteGen] Initialized v${this.version}`);
@@ -224,7 +231,7 @@ class CiteGenPlugin {
           for (const nid of noteIDs) {
             const note = Zotero.Items.get(nid);
             const content = note.getNote();
-            if (content && content.includes("AI Citation Reason")) {
+            if (content && content.includes("Citation Reason")) {
               reasonNote = content;
               break;
             }
@@ -234,7 +241,7 @@ class CiteGenPlugin {
             body.innerHTML = reasonNote;
           } else {
             body.innerHTML =
-              '<p style="color: #9ca3af; font-style: italic;">No AI citation info. Import citations via Tools → Import AI Citations.</p>';
+              '<p style="color: #9ca3af; font-style: italic;">No citation reason note. Import citations via Tools → Import AI Citations.</p>';
           }
         },
       });
@@ -275,6 +282,25 @@ class CiteGenPlugin {
       pw.startCloseTimer(4000);
     } catch {
       Zotero.debug(`[CiteGen] ${type}: ${message}`);
+    }
+  }
+
+  private migrateLegacyPrefs() {
+    try {
+      const prefRoot = "extensions.zotero.citegen.";
+      const tagImported = Zotero.Prefs.get(`${prefRoot}tagImported`, true);
+      const importTag = Zotero.Prefs.get(`${prefRoot}importTag`, true);
+      if (tagImported === true && importTag === "ai-citation") {
+        Zotero.Prefs.set(`${prefRoot}tagImported`, false, true);
+        Zotero.Prefs.set(`${prefRoot}importTag`, "", true);
+      }
+
+      const noteTemplate = Zotero.Prefs.get(`${prefRoot}noteTemplate`, true);
+      if (noteTemplate === OLD_NOTE_TEMPLATE) {
+        Zotero.Prefs.set(`${prefRoot}noteTemplate`, NEW_NOTE_TEMPLATE, true);
+      }
+    } catch (e) {
+      Zotero.debug(`[CiteGen] Could not migrate legacy prefs: ${(e as Error).message}`);
     }
   }
 }
