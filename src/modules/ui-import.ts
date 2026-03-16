@@ -1,6 +1,6 @@
 /**
  * Import dialog — built via DOM manipulation on about:blank.
- * This avoids the blank-window behavior we saw with custom XHTML dialogs in Zotero 8.
+ * We use custom pickers instead of native selects because the latter are unreliable in Zotero's popup chrome.
  */
 
 import { ImportDialogController } from "./import-dialog";
@@ -17,13 +17,28 @@ interface DestinationLibrary {
   name: string;
 }
 
+interface PickerOption {
+  value: string;
+  label: string;
+}
+
+interface PickerControl {
+  root: HTMLElement;
+  close(): void;
+  getValue(): string;
+  onChange(handler: (value: string) => void): void;
+  setDisabled(disabled: boolean): void;
+  setOptions(options: PickerOption[]): void;
+  setValue(value: string): void;
+}
+
 export function openImportDialog(_rootURI: string) {
   const controller = new ImportDialogController();
   const mainWin = Zotero.getMainWindow();
   const win = mainWin.openDialog(
     "about:blank",
     "citegen-import",
-    "chrome,centerscreen,resizable,dialog=no,width=900,height=680",
+    "chrome,centerscreen,resizable,dialog=no,width=960,height=700",
   );
 
   const init = () => buildImportUI(win, controller);
@@ -52,7 +67,7 @@ function buildImportUI(win: Window, controller: ImportDialogController) {
       "display:flex",
       "flex-direction:column",
       "height:100%",
-      "gap:8px",
+      "gap:10px",
       "overflow:hidden",
       "box-sizing:border-box",
     ].join(";"),
@@ -93,30 +108,31 @@ function buildImportUI(win: Window, controller: ImportDialogController) {
   btnImport.disabled = true;
   const btnNewCollection = makeButton(doc, "New Collection...");
 
-  const librarySelect = h(doc, "select", {
-    style: selectStyle(),
-  }) as HTMLSelectElement;
-  const collectionSelect = h(doc, "select", {
-    style: selectStyle(),
-  }) as HTMLSelectElement;
-  collectionSelect.appendChild(makeOption(doc, "", "Library Root"));
+  const libraryPicker = createPicker(doc, "Select library", "250px");
+  const collectionPicker = createPicker(doc, "Library Root", "340px");
 
-  const toolbar = h(
+  const actionRow = h(
     doc,
     "div",
-    { style: "display:flex;gap:6px;align-items:center;flex-wrap:wrap;" },
+    { style: "display:flex;gap:8px;align-items:center;flex-wrap:wrap;" },
     btnPreview,
     btnBrowse,
     btnVerify,
-    h(doc, "span", { style: "flex:1;" }),
-    h(doc, "span", { style: "font-size:12px;color:#475569;" }, "Library:"),
-    librarySelect,
-    h(doc, "span", { style: "font-size:12px;color:#475569;" }, "Collection:"),
-    collectionSelect,
+  );
+
+  const destinationRow = h(
+    doc,
+    "div",
+    { style: "display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;" },
+    fieldGroup(doc, "Library", libraryPicker.root),
+    fieldGroup(doc, "Collection", collectionPicker.root),
     btnNewCollection,
+    h(doc, "span", { style: "flex:1 1 12px;" }),
     btnImport,
   );
-  root.appendChild(toolbar);
+
+  root.appendChild(actionRow);
+  root.appendChild(destinationRow);
 
   const opts: Record<string, HTMLInputElement> = {};
   const optionDefs: Array<[string, string, boolean]> = [
@@ -217,6 +233,11 @@ function buildImportUI(win: Window, controller: ImportDialogController) {
     ),
   );
 
+  const closePickers = () => {
+    libraryPicker.close();
+    collectionPicker.close();
+  };
+
   function setStatus(message: string, type: "info" | "err" | "ok" | "warn" = "info") {
     const colors: Record<typeof type, { bg: string; fg: string }> = {
       info: { bg: "#dbeafe", fg: "#1e40af" },
@@ -227,12 +248,6 @@ function buildImportUI(win: Window, controller: ImportDialogController) {
     statusBar.textContent = message;
     statusBar.style.backgroundColor = colors[type].bg;
     statusBar.style.color = colors[type].fg;
-  }
-
-  function clearChildren(node: Node) {
-    while (node.firstChild) {
-      node.removeChild(node.firstChild);
-    }
   }
 
   function getEditableLibraries(): DestinationLibrary[] {
@@ -265,46 +280,38 @@ function buildImportUI(win: Window, controller: ImportDialogController) {
     }
   }
 
-  function appendCollectionOption(collection: any, depth: number) {
-    const prefix = depth > 0 ? `${"-- ".repeat(depth)}` : "";
-    collectionSelect.appendChild(
-      makeOption(doc, String(collection.id), `${prefix}${collection.name}`),
-    );
-    const children = collection.getChildCollections?.(false, false) || [];
-    for (const child of children) {
-      appendCollectionOption(child, depth + 1);
-    }
+  function buildCollectionOptions(libraryID: number): PickerOption[] {
+    const options: PickerOption[] = [{ value: "", label: "Library Root" }];
+    try {
+      const collections = Zotero.Collections.getByLibrary(libraryID) || [];
+      const topCollections = collections.filter((collection) => !collection.parentID);
+      for (const collection of topCollections) {
+        collectCollectionOptions(collection, 0, options);
+      }
+    } catch {}
+    return options;
   }
 
   function populateCollections(libraryID: number, selectedCollectionID: number | null) {
-    clearChildren(collectionSelect);
-    collectionSelect.appendChild(makeOption(doc, "", "Library Root"));
-
-    let topCollections: any[] = [];
-    try {
-      const collections = Zotero.Collections.getByLibrary(libraryID) || [];
-      topCollections = collections.filter((collection) => !collection.parentID);
-    } catch {}
-
-    for (const collection of topCollections) {
-      appendCollectionOption(collection, 0);
-    }
-
-    const desiredValue = selectedCollectionID ? String(selectedCollectionID) : "";
-    collectionSelect.value = desiredValue;
-    if (collectionSelect.value !== desiredValue) {
-      collectionSelect.value = "";
-    }
+    const options = buildCollectionOptions(libraryID);
+    collectionPicker.setOptions(options);
+    collectionPicker.setDisabled(false);
+    collectionPicker.setValue(selectedCollectionID ? String(selectedCollectionID) : "");
   }
 
   function populateDestinations() {
     const libraries = getEditableLibraries();
-    clearChildren(librarySelect);
-    for (const library of libraries) {
-      librarySelect.appendChild(makeOption(doc, String(library.id), library.name));
-    }
+    libraryPicker.setOptions(
+      libraries.map((library) => ({
+        value: String(library.id),
+        label: library.name,
+      })),
+    );
 
     if (!libraries.length) {
+      libraryPicker.setDisabled(true);
+      collectionPicker.setOptions([{ value: "", label: "Library Root" }]);
+      collectionPicker.setDisabled(true);
       btnNewCollection.disabled = true;
       btnImport.disabled = true;
       setStatus("No editable libraries are available for import.", "err");
@@ -319,8 +326,10 @@ function buildImportUI(win: Window, controller: ImportDialogController) {
       activeDest.collectionID = null;
     }
 
-    librarySelect.value = String(selectedLibraryID);
+    libraryPicker.setDisabled(false);
+    libraryPicker.setValue(String(selectedLibraryID));
     populateCollections(selectedLibraryID, activeDest.collectionID);
+    btnNewCollection.disabled = false;
   }
 
   btnPreview.addEventListener("click", () => {
@@ -365,19 +374,20 @@ function buildImportUI(win: Window, controller: ImportDialogController) {
       statusCell.id = `vs-${index}`;
       statusCell.style.color = citation.doi ? "#d97706" : "#9ca3af";
 
-      const row = h(
-        doc,
-        "tr",
-        {},
-        makeCell(doc, String(index + 1)),
-        makeCell(doc, truncate(citation.title, 55)),
-        makeCell(doc, truncate((citation.authors || []).join(", ") || "Unknown", 30)),
-        makeCell(doc, citation.year ? String(citation.year) : "\u2014"),
-        makeCell(doc, source),
-        statusCell,
-        makeCell(doc, truncate(citation.reason || "\u2014", 45)),
+      tbody.appendChild(
+        h(
+          doc,
+          "tr",
+          {},
+          makeCell(doc, String(index + 1)),
+          makeCell(doc, truncate(citation.title, 55)),
+          makeCell(doc, truncate((citation.authors || []).join(", ") || "Unknown", 30)),
+          makeCell(doc, citation.year ? String(citation.year) : "\u2014"),
+          makeCell(doc, source),
+          statusCell,
+          makeCell(doc, truncate(citation.reason || "\u2014", 45)),
+        ),
       );
-      tbody.appendChild(row);
     });
 
     summary.textContent =
@@ -389,7 +399,7 @@ function buildImportUI(win: Window, controller: ImportDialogController) {
       warnings.length ? "warn" : "ok",
     );
     btnVerify.disabled = false;
-    btnImport.disabled = !librarySelect.value;
+    btnImport.disabled = !libraryPicker.getValue();
   });
 
   btnVerify.addEventListener("click", async () => {
@@ -414,7 +424,10 @@ function buildImportUI(win: Window, controller: ImportDialogController) {
 
       const validCount = results.filter((result) => result.valid).length;
       const invalidCount = results.length - validCount;
-      setStatus(`DOI check: ${validCount} valid, ${invalidCount} not found`, validCount ? "ok" : "err");
+      setStatus(
+        `DOI check: ${validCount} valid, ${invalidCount} not found`,
+        validCount ? "ok" : "err",
+      );
     } catch (error) {
       setStatus(`Error: ${(error as Error).message}`, "err");
     } finally {
@@ -427,10 +440,13 @@ function buildImportUI(win: Window, controller: ImportDialogController) {
 
     btnImport.disabled = true;
     btnVerify.disabled = true;
+    closePickers();
 
+    const libraryValue = libraryPicker.getValue();
+    const collectionValue = collectionPicker.getValue();
     const importOptions = {
-      libraryID: librarySelect.value ? parseInt(librarySelect.value, 10) : undefined,
-      collectionID: collectionSelect.value ? parseInt(collectionSelect.value, 10) : undefined,
+      libraryID: libraryValue ? parseInt(libraryValue, 10) : undefined,
+      collectionID: collectionValue ? parseInt(collectionValue, 10) : undefined,
       verifyDOIs: opts.verify.checked,
       useSemanticScholar: opts.s2.checked,
       resolveURLs: opts.resolve.checked,
@@ -498,27 +514,35 @@ function buildImportUI(win: Window, controller: ImportDialogController) {
     }
   });
 
-  librarySelect.addEventListener("change", () => {
-    const libraryID = parseInt(librarySelect.value, 10);
+  libraryPicker.onChange((value) => {
+    const libraryID = parseInt(value, 10);
+    if (Number.isNaN(libraryID)) return;
     activeDest.libraryID = libraryID;
     activeDest.collectionID = null;
     populateCollections(libraryID, null);
+    btnNewCollection.disabled = false;
     if (currentPayload) {
       btnImport.disabled = false;
     }
   });
 
+  collectionPicker.onChange((value) => {
+    activeDest.collectionID = value ? parseInt(value, 10) : null;
+  });
+
   btnNewCollection.addEventListener("click", async () => {
-    if (!librarySelect.value) return;
+    const libraryValue = libraryPicker.getValue();
+    if (!libraryValue) return;
 
     const input = { value: "" };
+    const check = { value: false };
     const ok = Services.prompt.prompt(
       win,
       "New Collection",
       "Enter a name for the new collection:",
       input,
       null,
-      { value: false },
+      check,
     );
     if (!ok) return;
 
@@ -529,15 +553,18 @@ function buildImportUI(win: Window, controller: ImportDialogController) {
     }
 
     try {
+      const libraryID = parseInt(libraryValue, 10);
+      const parentValue = collectionPicker.getValue();
       const collection = new Zotero.Collection();
-      collection.libraryID = parseInt(librarySelect.value, 10);
+      collection.libraryID = libraryID;
       collection.name = name;
-      if (collectionSelect.value) {
-        collection.parentID = parseInt(collectionSelect.value, 10);
+      if (parentValue) {
+        collection.parentID = parseInt(parentValue, 10);
       }
       await collection.saveTx();
+
       activeDest.collectionID = collection.id;
-      populateCollections(collection.libraryID, collection.id);
+      populateCollections(libraryID, collection.id);
       setStatus(`Created collection "${name}".`, "ok");
     } catch (error) {
       setStatus(`Collection error: ${(error as Error).message}`, "err");
@@ -546,6 +573,7 @@ function buildImportUI(win: Window, controller: ImportDialogController) {
 
   btnBrowse.addEventListener("click", async () => {
     try {
+      closePickers();
       const filePicker = Components.classes["@mozilla.org/filepicker;1"].createInstance(
         Components.interfaces.nsIFilePicker,
       );
@@ -561,6 +589,7 @@ function buildImportUI(win: Window, controller: ImportDialogController) {
     }
   });
 
+  win.addEventListener("blur", closePickers);
   populateDestinations();
 }
 
@@ -600,19 +629,36 @@ function clearDocument(doc: Document) {
   }
 }
 
+function clearChildren(node: Node) {
+  while (node.firstChild) {
+    node.removeChild(node.firstChild);
+  }
+}
+
+function collectCollectionOptions(collection: any, depth: number, options: PickerOption[]) {
+  const prefix = depth > 0 ? `${"-- ".repeat(depth)}` : "";
+  options.push({
+    value: String(collection.id),
+    label: `${prefix}${collection.name}`,
+  });
+  const children = collection.getChildCollections?.(false, false) || [];
+  for (const child of children) {
+    collectCollectionOptions(child, depth + 1, options);
+  }
+}
+
 function truncate(text: string, max: number): string {
   return text.length > max ? `${text.slice(0, max - 1)}\u2026` : text;
 }
 
-function selectStyle() {
-  return "min-width:170px;padding:4px 8px;border-radius:6px;border:1px solid #c4c4c4;background:#fff;font-size:12px;color:#1f2937;";
-}
-
-function makeOption(doc: Document, value: string, label: string) {
-  const option = doc.createElementNS(HTML_NS, "option") as HTMLOptionElement;
-  option.value = value;
-  option.textContent = label;
-  return option;
+function fieldGroup(doc: Document, label: string, control: HTMLElement) {
+  return h(
+    doc,
+    "div",
+    { style: "display:flex;flex-direction:column;gap:4px;" },
+    h(doc, "span", { style: "font-size:12px;color:#475569;" }, `${label}:`),
+    control,
+  );
 }
 
 function makeCell(doc: Document, text: string) {
@@ -644,6 +690,182 @@ function makeButton(doc: Document, text: string, primary = false) {
     },
     text,
   ) as HTMLButtonElement;
+}
+
+function createPicker(doc: Document, placeholder: string, minWidth: string): PickerControl {
+  const root = h(doc, "div", {
+    style: `position:relative;min-width:${minWidth};`,
+  });
+  const label = h(doc, "span", {
+    style: "flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left;",
+  });
+  const arrow = h(
+    doc,
+    "span",
+    {
+      style: "margin-left:8px;font-size:10px;color:#64748b;flex:none;",
+    },
+    "v",
+  );
+  const trigger = h(
+    doc,
+    "button",
+    {
+      type: "button",
+      style: [
+        "display:flex",
+        "align-items:center",
+        "justify-content:space-between",
+        "gap:8px",
+        "width:100%",
+        "padding:7px 10px",
+        "border-radius:6px",
+        "border:1px solid #c4c4c4",
+        "background:#fff",
+        "font-size:12px",
+        "color:#1f2937",
+        "cursor:pointer",
+      ].join(";"),
+    },
+    label,
+    arrow,
+  ) as HTMLButtonElement;
+  trigger.setAttribute("aria-expanded", "false");
+
+  const menu = h(doc, "div", {
+    style: [
+      "display:none",
+      "position:absolute",
+      "top:calc(100% + 4px)",
+      "left:0",
+      "right:0",
+      "max-height:240px",
+      "overflow:auto",
+      "padding:4px",
+      "background:#fff",
+      "border:1px solid #c4c4c4",
+      "border-radius:8px",
+      "box-shadow:0 10px 30px rgba(15,23,42,0.15)",
+      "z-index:1000",
+    ].join(";"),
+  });
+
+  root.appendChild(trigger);
+  root.appendChild(menu);
+
+  let options: PickerOption[] = [];
+  let value = "";
+  const changeHandlers: Array<(value: string) => void> = [];
+
+  const close = () => {
+    menu.style.display = "none";
+    trigger.setAttribute("aria-expanded", "false");
+  };
+
+  const render = () => {
+    if (!options.some((option) => option.value === value) && options.length) {
+      value = options[0].value;
+    }
+
+    const current = options.find((option) => option.value === value);
+    label.textContent = current?.label || placeholder;
+    label.style.color = current ? "#1f2937" : "#94a3b8";
+
+    Array.from(menu.children).forEach((child) => {
+      const item = child as HTMLButtonElement;
+      const selected = item.dataset.value === value;
+      item.style.backgroundColor = selected ? "#eff6ff" : "transparent";
+      item.style.color = selected ? "#1d4ed8" : "#1f2937";
+      item.style.fontWeight = selected ? "600" : "400";
+    });
+  };
+
+  trigger.addEventListener("click", (event) => {
+    event.stopPropagation();
+    if (trigger.disabled || !options.length) return;
+    const expanded = trigger.getAttribute("aria-expanded") === "true";
+    if (expanded) {
+      close();
+    } else {
+      menu.style.display = "block";
+      trigger.setAttribute("aria-expanded", "true");
+    }
+  });
+
+  doc.addEventListener("click", (event) => {
+    const target = event.target;
+    if (target && root.contains(target as Node)) return;
+    close();
+  });
+
+  return {
+    root,
+    close,
+    getValue: () => value,
+    onChange(handler) {
+      changeHandlers.push(handler);
+    },
+    setDisabled(disabled) {
+      trigger.disabled = disabled;
+      trigger.style.opacity = disabled ? "0.6" : "1";
+      trigger.style.cursor = disabled ? "default" : "pointer";
+      if (disabled) {
+        close();
+      }
+    },
+    setOptions(nextOptions) {
+      options = nextOptions.slice();
+      clearChildren(menu);
+
+      for (const option of options) {
+        const item = h(
+          doc,
+          "button",
+          {
+            type: "button",
+            style: [
+              "display:block",
+              "width:100%",
+              "padding:7px 10px",
+              "border:0",
+              "border-radius:6px",
+              "background:transparent",
+              "text-align:left",
+              "cursor:pointer",
+              "font-size:12px",
+            ].join(";"),
+          },
+          option.label,
+        ) as HTMLButtonElement;
+        item.dataset.value = option.value;
+        item.addEventListener("click", (event) => {
+          event.stopPropagation();
+          value = option.value;
+          render();
+          close();
+          for (const handler of changeHandlers) {
+            handler(value);
+          }
+        });
+        menu.appendChild(item);
+      }
+
+      if (!options.some((option) => option.value === value)) {
+        value = options[0]?.value ?? "";
+      }
+      render();
+    },
+    setValue(nextValue) {
+      if (options.some((option) => option.value === nextValue)) {
+        value = nextValue;
+      } else if (options.length) {
+        value = options[0].value;
+      } else {
+        value = "";
+      }
+      render();
+    },
+  };
 }
 
 function h(

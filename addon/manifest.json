@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "Zotero Citation Generator",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Import AI-generated citations from JSON, verify via DOI, and map reasoning into Zotero notes",
   "homepage_url": "https://github.com/ahmadjalil/zotero-cite-gen",
   "author": "Ahmad Jalil",
