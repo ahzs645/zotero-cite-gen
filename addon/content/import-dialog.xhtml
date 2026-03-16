@@ -13,19 +13,23 @@
   width="820"
   height="620"
   persist="screenX screenY width height"
+  style="background-color: #f8f9fa;"
 >
   <script src="chrome://zotero/content/include.js"/>
 
   <html:style>
-    #citegen-root { font-family: -apple-system, BlinkMacSystemFont, sans-serif; font-size: 13px; padding: 12px; display: flex; flex-direction: column; height: 100%; gap: 8px; overflow: hidden; }
+    #citegen-root { font-family: -apple-system, BlinkMacSystemFont, sans-serif; font-size: 13px; padding: 12px; display: flex; flex-direction: column; height: 100%; gap: 8px; overflow: hidden; box-sizing: border-box; background: #f8f9fa; color: #1f2937; }
     #citegen-root label.cg-label { font-weight: 600; font-size: 13px; display: block; margin-bottom: 4px; }
-    #cg-input { width: 100%; min-height: 90px; max-height: 160px; font-family: monospace; font-size: 11px; border: 1px solid #c4c4c4; border-radius: 6px; padding: 8px; resize: vertical; box-sizing: border-box; }
+    #cg-input { width: 100%; min-height: 90px; max-height: 160px; font-family: monospace; font-size: 11px; border: 1px solid #c4c4c4; border-radius: 6px; padding: 8px; resize: vertical; box-sizing: border-box; background: #fff; line-height: 1.45; }
     .cg-btn-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
     .cg-btn { padding: 5px 14px; border-radius: 6px; border: 1px solid #c4c4c4; background: #fff; cursor: pointer; font-size: 12px; font-weight: 500; }
     .cg-btn:hover { background: #f0f0f0; }
     .cg-btn:disabled { opacity: 0.4; }
     .cg-btn-primary { background: #2563eb; color: #fff; border-color: #2563eb; }
     .cg-btn-primary:hover { background: #1d4ed8; }
+    .cg-dest { display: inline-flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+    .cg-dest-label { font-size: 12px; color: #475569; }
+    .cg-select { min-width: 170px; padding: 4px 8px; border-radius: 6px; border: 1px solid #c4c4c4; background: #fff; font-size: 12px; color: #1f2937; }
     .cg-opts { display: flex; gap: 12px; font-size: 11px; flex-wrap: wrap; }
     .cg-opts label { display: inline-flex; align-items: center; gap: 3px; cursor: pointer; font-weight: normal; }
     .cg-spacer { flex: 1; }
@@ -53,8 +57,15 @@
       <html:button id="cg-browse" class="cg-btn">Browse File...</html:button>
       <html:button id="cg-verify" class="cg-btn" disabled="disabled">Verify DOIs</html:button>
       <html:span class="cg-spacer"/>
-      <html:span style="font-size:12px;">Into: </html:span>
-      <html:select id="cg-coll"><html:option value="">My Library</html:option></html:select>
+      <html:div class="cg-dest">
+        <html:span class="cg-dest-label">Library:</html:span>
+        <html:select id="cg-lib" class="cg-select"/>
+        <html:span class="cg-dest-label">Collection:</html:span>
+        <html:select id="cg-coll" class="cg-select">
+          <html:option value="">Library Root</html:option>
+        </html:select>
+        <html:button id="cg-new-coll" class="cg-btn">New Collection...</html:button>
+      </html:div>
       <html:button id="cg-import" class="cg-btn cg-btn-primary" disabled="disabled">Import to Zotero</html:button>
     </html:div>
 
@@ -104,18 +115,7 @@
 
     var currentPayload = null;
     var doc = document;
-
-    // Populate collections
-    try {
-      var sel = doc.getElementById("cg-coll");
-      var colls = Zotero.Collections.getByLibrary(Zotero.Libraries.userLibraryID);
-      for (var i = 0; i < colls.length; i++) {
-        var o = doc.createElementNS("http://www.w3.org/1999/xhtml", "option");
-        o.value = String(colls[i].id);
-        o.textContent = colls[i].name;
-        sel.appendChild(o);
-      }
-    } catch(e) {}
+    var activeDest = getActiveDestination();
 
     function setStatus(msg, type) {
       var bar = doc.getElementById("cg-status");
@@ -125,11 +125,148 @@
 
     function trunc(s, n) { return s.length > n ? s.substring(0, n - 1) + "\u2026" : s; }
 
+    function clearChildren(node) {
+      while (node.firstChild) node.removeChild(node.firstChild);
+    }
+
+    function makeOption(value, label) {
+      var option = doc.createElementNS("http://www.w3.org/1999/xhtml", "option");
+      option.value = value;
+      option.textContent = label;
+      return option;
+    }
+
     function makeCell(text, attrs) {
       var td = doc.createElementNS("http://www.w3.org/1999/xhtml", "td");
       td.textContent = text;
       if (attrs) { for (var k in attrs) td.setAttribute(k, attrs[k]); }
       return td;
+    }
+
+    function getActiveDestination() {
+      var libraryID = Zotero.Libraries.userLibraryID;
+      var collectionID = null;
+
+      try {
+        var pane = Zotero.getActiveZoteroPane ? Zotero.getActiveZoteroPane() : null;
+        if (pane) {
+          var selectedCollection = pane.getSelectedCollection ? pane.getSelectedCollection() : null;
+          if (selectedCollection) {
+            libraryID = selectedCollection.libraryID;
+            collectionID = selectedCollection.id;
+          } else if (pane.getSelectedLibraryID) {
+            libraryID = pane.getSelectedLibraryID() || libraryID;
+          }
+        }
+      } catch (e) {}
+
+      return { libraryID: libraryID, collectionID: collectionID };
+    }
+
+    function getDestinationLibraries() {
+      var libs = [];
+      try {
+        var all = Zotero.Libraries.getAll();
+        for (var i = 0; i < all.length; i++) {
+          var libraryID = all[i].libraryID || all[i].id;
+          var type = Zotero.Libraries.getType(libraryID);
+          if (type === "feed") continue;
+          if (!Zotero.Libraries.isEditable(libraryID)) continue;
+          libs.push({
+            id: libraryID,
+            name: Zotero.Libraries.getName(libraryID),
+          });
+        }
+      } catch (e) {
+        libs.push({
+          id: Zotero.Libraries.userLibraryID,
+          name: "My Library",
+        });
+      }
+
+      libs.sort(function(a, b) {
+        if (a.id === Zotero.Libraries.userLibraryID) return -1;
+        if (b.id === Zotero.Libraries.userLibraryID) return 1;
+        return a.name.localeCompare(b.name);
+      });
+
+      return libs;
+    }
+
+    function appendCollectionOption(select, collection, level) {
+      var prefix = "";
+      for (var i = 0; i < level; i++) {
+        prefix += "-- ";
+      }
+
+      select.appendChild(
+        makeOption(String(collection.id), prefix + collection.name)
+      );
+
+      var children = [];
+      try {
+        children = collection.getChildCollections(false, false) || [];
+      } catch (e) {}
+
+      for (var j = 0; j < children.length; j++) {
+        appendCollectionOption(select, children[j], level + 1);
+      }
+    }
+
+    function populateCollections(libraryID, selectedCollectionID) {
+      var select = doc.getElementById("cg-coll");
+      clearChildren(select);
+      select.appendChild(makeOption("", "Library Root"));
+
+      var topCollections = [];
+      try {
+        topCollections = Zotero.Collections.getByLibrary(libraryID) || [];
+      } catch (e) {}
+
+      for (var i = 0; i < topCollections.length; i++) {
+        appendCollectionOption(select, topCollections[i], 0);
+      }
+
+      if (selectedCollectionID) {
+        select.value = String(selectedCollectionID);
+      }
+      if (select.value !== String(selectedCollectionID || "")) {
+        select.value = "";
+      }
+    }
+
+    function populateDestinations() {
+      var librarySelect = doc.getElementById("cg-lib");
+      var libraries = getDestinationLibraries();
+      clearChildren(librarySelect);
+
+      for (var i = 0; i < libraries.length; i++) {
+        librarySelect.appendChild(makeOption(String(libraries[i].id), libraries[i].name));
+      }
+
+      if (!libraries.length) {
+        doc.getElementById("cg-new-coll").disabled = true;
+        doc.getElementById("cg-import").disabled = true;
+        setStatus("No editable libraries are available for import.", "err");
+        return;
+      }
+
+      var selectedLibraryID = activeDest.libraryID;
+      var matchedLibrary = false;
+      for (var j = 0; j < libraries.length; j++) {
+        if (libraries[j].id === selectedLibraryID) {
+          matchedLibrary = true;
+          break;
+        }
+      }
+      if (!matchedLibrary) {
+        selectedLibraryID = libraries[0].id;
+        activeDest.collectionID = null;
+      }
+
+      librarySelect.value = String(selectedLibraryID);
+      populateCollections(selectedLibraryID, activeDest.collectionID);
+      doc.getElementById("cg-new-coll").disabled = false;
     }
 
     // Preview
@@ -202,8 +339,10 @@
       this.disabled = true;
       doc.getElementById("cg-verify").disabled = true;
 
+      var libraryVal = doc.getElementById("cg-lib").value;
       var collVal = doc.getElementById("cg-coll").value;
       var opts = {
+        libraryID: libraryVal ? parseInt(libraryVal, 10) : undefined,
         collectionID: collVal ? parseInt(collVal) : undefined,
         verifyDOIs: doc.getElementById("opt-verify").checked,
         useSemanticScholar: doc.getElementById("opt-s2").checked,
@@ -242,6 +381,50 @@
       doc.getElementById("cg-verify").disabled = false;
     });
 
+    doc.getElementById("cg-lib").addEventListener("change", function() {
+      var libraryID = parseInt(this.value, 10);
+      populateCollections(libraryID, null);
+    });
+
+    doc.getElementById("cg-new-coll").addEventListener("click", async function() {
+      var libraryVal = doc.getElementById("cg-lib").value;
+      if (!libraryVal) return;
+
+      var input = { value: "" };
+      var check = { value: false };
+      var ok = Services.prompt.prompt(
+        window,
+        "New Collection",
+        "Enter a name for the new collection:",
+        input,
+        null,
+        check
+      );
+      if (!ok) return;
+
+      var name = input.value.trim();
+      if (!name) {
+        setStatus("Collection name cannot be empty.", "err");
+        return;
+      }
+
+      try {
+        var libraryID = parseInt(libraryVal, 10);
+        var parentVal = doc.getElementById("cg-coll").value;
+        var collection = new Zotero.Collection();
+        collection.libraryID = libraryID;
+        collection.name = name;
+        if (parentVal) {
+          collection.parentID = parseInt(parentVal, 10);
+        }
+        await collection.saveTx();
+        populateCollections(libraryID, collection.id);
+        setStatus('Created collection "' + name + '".', "ok");
+      } catch (e) {
+        setStatus("Collection error: " + e.message, "err");
+      }
+    });
+
     // Browse file
     doc.getElementById("cg-browse").addEventListener("click", async function() {
       try {
@@ -255,5 +438,7 @@
         }
       } catch(e) { setStatus("File error: " + e.message, "err"); }
     });
+
+    populateDestinations();
   ]]></script>
 </window>

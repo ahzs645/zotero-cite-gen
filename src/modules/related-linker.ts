@@ -51,6 +51,7 @@ export async function linkRelatedItems(
 export async function createLiteratureMapNote(
   results: ImportResult[],
   query?: string,
+  libraryID?: number,
   collectionID?: number,
 ): Promise<any> {
   if (results.length === 0) return null;
@@ -95,7 +96,7 @@ export async function createLiteratureMapNote(
 
   // Create the note
   const note = new Zotero.Item("note");
-  note.libraryID = Zotero.Libraries.userLibraryID;
+  note.libraryID = libraryID ?? Zotero.Libraries.userLibraryID;
   note.setNote(html);
   await note.saveTx();
 

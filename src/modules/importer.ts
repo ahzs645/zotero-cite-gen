@@ -29,6 +29,8 @@ export interface ImportResult {
 }
 
 export interface ImportOptions {
+  /** Target library ID (defaults to user library) */
+  libraryID?: number;
   /** Target collection ID (null = My Library root) */
   collectionID?: number;
   /** Verify DOIs via CrossRef before importing */
@@ -192,6 +194,7 @@ export async function importCitations(
   options: ImportOptions = {},
 ): Promise<ImportResult[]> {
   const {
+    libraryID: requestedLibraryID,
     collectionID,
     verifyDOIs = true,
     useSemanticScholar = true,
@@ -206,7 +209,7 @@ export async function importCitations(
     onProgress,
   } = options;
 
-  const libraryID = Zotero.Libraries.userLibraryID;
+  const libraryID = requestedLibraryID ?? Zotero.Libraries.userLibraryID;
   let citations = [...payload.citations];
   const results: ImportResult[] = [];
 
@@ -276,7 +279,7 @@ export async function importCitations(
   if (checkDuplicates) {
     for (let i = 0; i < citations.length; i++) {
       onProgress?.("duplicates", i + 1, citations.length);
-      const result = await checkDuplicate(citations[i]);
+      const result = await checkDuplicate(citations[i], libraryID);
       if (result.isDuplicate) {
         dupResults.set(i, result);
       }
@@ -381,7 +384,12 @@ export async function importCitations(
   if (createLitMap && imported.length > 0) {
     onProgress?.("litmap", 0, 1, "Creating literature map...");
     try {
-      await createLiteratureMapNote(imported, query || payload.query, collectionID);
+      await createLiteratureMapNote(
+        imported,
+        query || payload.query,
+        libraryID,
+        collectionID,
+      );
     } catch (e) {
       Zotero.debug(`[CiteGen] Failed to create lit map: ${(e as Error).message}`);
     }

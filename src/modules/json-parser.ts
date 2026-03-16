@@ -165,7 +165,7 @@ function normalizeCitation(raw: any): AICitation {
   let year: number | undefined;
   if (raw.year) {
     year = typeof raw.year === "number" ? raw.year : parseInt(raw.year, 10);
-    if (isNaN(year)) year = undefined;
+    if (year !== undefined && isNaN(year)) year = undefined;
   } else if (raw.date) {
     const match = String(raw.date).match(/(\d{4})/);
     if (match) year = parseInt(match[1], 10);

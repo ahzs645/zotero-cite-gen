@@ -2,6 +2,13 @@ declare const __env__: string;
 
 declare const Zotero: {
   CiteGen: typeof import("../src/index").default;
+  Item: new (itemType: string) => any;
+  Collection: new (params?: {
+    name?: string;
+    libraryID?: number;
+    parentID?: number;
+    parentKey?: string;
+  }) => any;
   Prefs: {
     get(pref: string, global?: boolean): any;
     set(pref: string, value: any, global?: boolean): void;
@@ -12,6 +19,10 @@ declare const Zotero: {
   };
   Libraries: {
     userLibraryID: number;
+    getAll(): any[];
+    getName(libraryID: number): string;
+    getType(libraryID: number): string;
+    isEditable(libraryID: number): boolean;
   };
   ItemTypes: {
     getID(typeName: string): number;
@@ -111,3 +122,16 @@ declare const Cu: {
   unload(url: string): void;
 };
 declare const APP_SHUTDOWN: number;
+
+interface Window {
+  openDialog(
+    url: string,
+    name?: string,
+    features?: string,
+    ...args: any[]
+  ): Window;
+}
+
+interface Document {
+  createXULElement(tagName: string): any;
+}

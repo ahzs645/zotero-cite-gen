@@ -13,16 +13,17 @@
   width="650"
   height="520"
   persist="screenX screenY width height"
+  style="background-color: #f8f9fa;"
 >
   <script src="chrome://zotero/content/include.js"/>
 
   <html:style>
-    #cg-prompt-root { font-family: -apple-system, BlinkMacSystemFont, sans-serif; font-size: 13px; padding: 12px; display: flex; flex-direction: column; height: 100%; gap: 10px; }
+    #cg-prompt-root { font-family: -apple-system, BlinkMacSystemFont, sans-serif; font-size: 13px; padding: 12px; display: flex; flex-direction: column; height: 100%; gap: 10px; box-sizing: border-box; background: #f8f9fa; color: #1f2937; }
     .cg-desc { color: #475569; margin: 0; }
     .cg-form-row { display: flex; gap: 8px; align-items: center; }
     .cg-form-row label { font-weight: 600; min-width: 55px; }
     .cg-form-row input { flex: 1; padding: 6px 8px; border: 1px solid #c4c4c4; border-radius: 6px; font-size: 13px; }
-    #cg-prompt-out { flex: 1; width: 100%; font-family: monospace; font-size: 11px; border: 1px solid #c4c4c4; border-radius: 6px; padding: 8px; resize: none; box-sizing: border-box; }
+    #cg-prompt-out { flex: 1; width: 100%; font-family: monospace; font-size: 11px; border: 1px solid #c4c4c4; border-radius: 6px; padding: 8px; resize: none; box-sizing: border-box; background: #fff; line-height: 1.45; }
     .cg-btn-row { display: flex; gap: 8px; justify-content: flex-end; align-items: center; }
     .cg-pbtn { padding: 6px 16px; border-radius: 6px; border: 1px solid #c4c4c4; background: #fff; cursor: pointer; font-size: 13px; }
     .cg-pbtn-primary { background: #2563eb; color: #fff; border-color: #2563eb; }

@@ -125,6 +125,7 @@ class CiteGenPlugin {
   async importFromJSON(
     json: string,
     options?: {
+      libraryID?: number;
       collectionID?: number;
       verifyDOIs?: boolean;
       attachReasons?: boolean;
@@ -146,11 +147,11 @@ class CiteGenPlugin {
   // ── Private Methods ──
 
   private openImportDialog() {
-    openImportDialog();
+    openImportDialog(this.rootURI);
   }
 
   private openPromptDialog() {
-    openPromptDialog();
+    openPromptDialog(this.rootURI);
   }
 
   private async verifySelectedItems() {

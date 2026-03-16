@@ -19,9 +19,8 @@ export interface DuplicateCheckResult {
  */
 export async function checkDuplicate(
   citation: AICitation,
+  libraryID: number = Zotero.Libraries.userLibraryID,
 ): Promise<DuplicateCheckResult> {
-  const libraryID = Zotero.Libraries.userLibraryID;
-
   // 1. Check by DOI (highest confidence)
   if (citation.doi) {
     const s = new Zotero.Search();
@@ -104,12 +103,13 @@ export async function checkDuplicate(
  */
 export async function checkAllDuplicates(
   citations: AICitation[],
+  libraryID: number = Zotero.Libraries.userLibraryID,
   onProgress?: (current: number, total: number) => void,
 ): Promise<Map<number, DuplicateCheckResult>> {
   const results = new Map<number, DuplicateCheckResult>();
 
   for (let i = 0; i < citations.length; i++) {
-    const result = await checkDuplicate(citations[i]);
+    const result = await checkDuplicate(citations[i], libraryID);
     if (result.isDuplicate) {
       results.set(i, result);
     }

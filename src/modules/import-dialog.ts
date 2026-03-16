@@ -70,6 +70,7 @@ export class ImportDialogController {
 
     // Merge dialog options with preference defaults
     const mergedOptions: ImportOptions = {
+      libraryID: options.libraryID,
       verifyDOIs: options.verifyDOIs ?? getPref("verifyDOI"),
       useSemanticScholar: options.useSemanticScholar ?? true,
       resolveURLs: options.resolveURLs ?? true,
