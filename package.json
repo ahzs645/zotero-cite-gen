@@ -1,6 +1,6 @@
 {
   "name": "zotero-cite-gen",
-  "version": "1.0.1",
+  "version": "1.0.4",
   "type": "module",
   "description": "Import AI-generated citations from JSON, verify DOIs, and map reasoning into Zotero notes",
   "repository": {

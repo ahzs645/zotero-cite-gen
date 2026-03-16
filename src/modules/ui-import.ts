@@ -1,6 +1,6 @@
 /**
  * Import dialog — built via DOM manipulation on about:blank.
- * We use custom pickers instead of native selects because the latter are unreliable in Zotero's popup chrome.
+ * Destination selection uses an explicit chooser dialog instead of popup menus.
  */
 
 import { ImportDialogController } from "./import-dialog";
@@ -17,19 +17,9 @@ interface DestinationLibrary {
   name: string;
 }
 
-interface PickerOption {
+interface OptionItem {
   value: string;
   label: string;
-}
-
-interface PickerControl {
-  root: HTMLElement;
-  close(): void;
-  getValue(): string;
-  onChange(handler: (value: string) => void): void;
-  setDisabled(disabled: boolean): void;
-  setOptions(options: PickerOption[]): void;
-  setValue(value: string): void;
 }
 
 export function openImportDialog(_rootURI: string) {
@@ -56,6 +46,10 @@ function buildImportUI(win: Window, controller: ImportDialogController) {
 
   const activeDest = getActiveDestination();
   let currentPayload: ReturnType<ImportDialogController["getPayload"]> = null;
+  let selectedLibraryID = activeDest.libraryID;
+  let selectedCollectionID = activeDest.collectionID;
+  let libraryOptions: OptionItem[] = [];
+  let collectionOptions: OptionItem[] = [];
 
   const root = h(doc, "div", {
     style: [
@@ -106,10 +100,12 @@ function buildImportUI(win: Window, controller: ImportDialogController) {
   btnVerify.disabled = true;
   const btnImport = makeButton(doc, "Import to Zotero", true);
   btnImport.disabled = true;
+  const btnChooseLibrary = makeButton(doc, "Choose...");
+  const btnChooseCollection = makeButton(doc, "Choose...");
   const btnNewCollection = makeButton(doc, "New Collection...");
 
-  const libraryPicker = createPicker(doc, "Select library", "250px");
-  const collectionPicker = createPicker(doc, "Library Root", "340px");
+  const libraryValue = makeValueBox(doc, "Select library");
+  const collectionValue = makeValueBox(doc, "Library Root");
 
   const actionRow = h(
     doc,
@@ -124,8 +120,8 @@ function buildImportUI(win: Window, controller: ImportDialogController) {
     doc,
     "div",
     { style: "display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;" },
-    fieldGroup(doc, "Library", libraryPicker.root),
-    fieldGroup(doc, "Collection", collectionPicker.root),
+    fieldGroup(doc, "Library", libraryValue, btnChooseLibrary),
+    fieldGroup(doc, "Collection", collectionValue, btnChooseCollection),
     btnNewCollection,
     h(doc, "span", { style: "flex:1 1 12px;" }),
     btnImport,
@@ -233,11 +229,6 @@ function buildImportUI(win: Window, controller: ImportDialogController) {
     ),
   );
 
-  const closePickers = () => {
-    libraryPicker.close();
-    collectionPicker.close();
-  };
-
   function setStatus(message: string, type: "info" | "err" | "ok" | "warn" = "info") {
     const colors: Record<typeof type, { bg: string; fg: string }> = {
       info: { bg: "#dbeafe", fg: "#1e40af" },
@@ -280,8 +271,8 @@ function buildImportUI(win: Window, controller: ImportDialogController) {
     }
   }
 
-  function buildCollectionOptions(libraryID: number): PickerOption[] {
-    const options: PickerOption[] = [{ value: "", label: "Library Root" }];
+  function buildCollectionOptions(libraryID: number): OptionItem[] {
+    const options: OptionItem[] = [{ value: "", label: "Library Root" }];
     try {
       const collections = Zotero.Collections.getByLibrary(libraryID) || [];
       const topCollections = collections.filter((collection) => !collection.parentID);
@@ -292,45 +283,93 @@ function buildImportUI(win: Window, controller: ImportDialogController) {
     return options;
   }
 
-  function populateCollections(libraryID: number, selectedCollectionID: number | null) {
-    const options = buildCollectionOptions(libraryID);
-    collectionPicker.setOptions(options);
-    collectionPicker.setDisabled(false);
-    collectionPicker.setValue(selectedCollectionID ? String(selectedCollectionID) : "");
+  function getOptionLabel(options: OptionItem[], value: string) {
+    return options.find((option) => option.value === value)?.label || "";
+  }
+
+  function renderDestination() {
+    const libraryLabel =
+      getOptionLabel(libraryOptions, String(selectedLibraryID)) || "Select library";
+    const collectionLabel =
+      getOptionLabel(collectionOptions, selectedCollectionID ? String(selectedCollectionID) : "") ||
+      "Library Root";
+
+    libraryValue.textContent = libraryLabel;
+    libraryValue.style.color = selectedLibraryID ? "#1f2937" : "#94a3b8";
+    collectionValue.textContent = collectionLabel;
+    collectionValue.style.color = "#1f2937";
+
+    btnChooseLibrary.disabled = libraryOptions.length === 0;
+    btnChooseCollection.disabled = !selectedLibraryID || collectionOptions.length === 0;
+    btnNewCollection.disabled = !selectedLibraryID;
+  }
+
+  function populateCollections(libraryID: number, desiredCollectionID: number | null) {
+    collectionOptions = buildCollectionOptions(libraryID);
+    const desiredValue = desiredCollectionID ? String(desiredCollectionID) : "";
+    const exists = collectionOptions.some((option) => option.value === desiredValue);
+    selectedCollectionID = exists && desiredValue ? parseInt(desiredValue, 10) : null;
+    renderDestination();
   }
 
   function populateDestinations() {
-    const libraries = getEditableLibraries();
-    libraryPicker.setOptions(
-      libraries.map((library) => ({
-        value: String(library.id),
-        label: library.name,
-      })),
-    );
+    libraryOptions = getEditableLibraries().map((library) => ({
+      value: String(library.id),
+      label: library.name,
+    }));
 
-    if (!libraries.length) {
-      libraryPicker.setDisabled(true);
-      collectionPicker.setOptions([{ value: "", label: "Library Root" }]);
-      collectionPicker.setDisabled(true);
-      btnNewCollection.disabled = true;
+    if (!libraryOptions.length) {
+      selectedLibraryID = 0;
+      selectedCollectionID = null;
+      collectionOptions = [{ value: "", label: "Library Root" }];
+      renderDestination();
       btnImport.disabled = true;
       setStatus("No editable libraries are available for import.", "err");
       return;
     }
 
-    const selectedLibraryID = libraries.some((library) => library.id === activeDest.libraryID)
-      ? activeDest.libraryID
-      : libraries[0].id;
-    if (selectedLibraryID !== activeDest.libraryID) {
-      activeDest.libraryID = selectedLibraryID;
-      activeDest.collectionID = null;
+    const libraryExists = libraryOptions.some(
+      (option) => option.value === String(selectedLibraryID),
+    );
+    if (!libraryExists) {
+      selectedLibraryID = parseInt(libraryOptions[0].value, 10);
+      selectedCollectionID = null;
     }
 
-    libraryPicker.setDisabled(false);
-    libraryPicker.setValue(String(selectedLibraryID));
-    populateCollections(selectedLibraryID, activeDest.collectionID);
-    btnNewCollection.disabled = false;
+    populateCollections(selectedLibraryID, selectedCollectionID);
+    renderDestination();
   }
+
+  btnChooseLibrary.addEventListener("click", async () => {
+    const selected = await chooseOption(
+      doc,
+      "Choose Library",
+      libraryOptions,
+      String(selectedLibraryID),
+    );
+    if (selected == null) return;
+
+    selectedLibraryID = parseInt(selected, 10);
+    selectedCollectionID = null;
+    populateCollections(selectedLibraryID, null);
+    renderDestination();
+    if (currentPayload) {
+      btnImport.disabled = false;
+    }
+  });
+
+  btnChooseCollection.addEventListener("click", async () => {
+    const selected = await chooseOption(
+      doc,
+      "Choose Collection",
+      collectionOptions,
+      selectedCollectionID ? String(selectedCollectionID) : "",
+    );
+    if (selected == null) return;
+
+    selectedCollectionID = selected ? parseInt(selected, 10) : null;
+    renderDestination();
+  });
 
   btnPreview.addEventListener("click", () => {
     const raw = textarea.value;
@@ -399,7 +438,7 @@ function buildImportUI(win: Window, controller: ImportDialogController) {
       warnings.length ? "warn" : "ok",
     );
     btnVerify.disabled = false;
-    btnImport.disabled = !libraryPicker.getValue();
+    btnImport.disabled = !selectedLibraryID;
   });
 
   btnVerify.addEventListener("click", async () => {
@@ -440,13 +479,15 @@ function buildImportUI(win: Window, controller: ImportDialogController) {
 
     btnImport.disabled = true;
     btnVerify.disabled = true;
-    closePickers();
 
-    const libraryValue = libraryPicker.getValue();
-    const collectionValue = collectionPicker.getValue();
+    const libraryLabel = getOptionLabel(libraryOptions, String(selectedLibraryID)) || "Unknown library";
+    const collectionLabel =
+      getOptionLabel(collectionOptions, selectedCollectionID ? String(selectedCollectionID) : "") ||
+      "Library Root";
+
     const importOptions = {
-      libraryID: libraryValue ? parseInt(libraryValue, 10) : undefined,
-      collectionID: collectionValue ? parseInt(collectionValue, 10) : undefined,
+      libraryID: selectedLibraryID || undefined,
+      collectionID: selectedCollectionID || undefined,
       verifyDOIs: opts.verify.checked,
       useSemanticScholar: opts.s2.checked,
       resolveURLs: opts.resolve.checked,
@@ -469,6 +510,7 @@ function buildImportUI(win: Window, controller: ImportDialogController) {
     };
 
     try {
+      setStatus(`Importing to ${libraryLabel} / ${collectionLabel}...`, "info");
       const results = await controller.runImport(importOptions, (stage, current, total, detail) => {
         const label = labels[stage] || stage;
         setStatus(
@@ -480,7 +522,7 @@ function buildImportUI(win: Window, controller: ImportDialogController) {
       const imported = results.filter((result) => !result.skipped).length;
       const skipped = results.length - imported;
       setStatus(
-        `Done! Imported ${imported} item(s).${skipped ? ` Skipped ${skipped} duplicate(s).` : ""}`,
+        `Done! Imported ${imported} item(s) to ${collectionLabel}.${skipped ? ` Skipped ${skipped} duplicate(s).` : ""}`,
         "ok",
       );
       summary.textContent =
@@ -514,25 +556,8 @@ function buildImportUI(win: Window, controller: ImportDialogController) {
     }
   });
 
-  libraryPicker.onChange((value) => {
-    const libraryID = parseInt(value, 10);
-    if (Number.isNaN(libraryID)) return;
-    activeDest.libraryID = libraryID;
-    activeDest.collectionID = null;
-    populateCollections(libraryID, null);
-    btnNewCollection.disabled = false;
-    if (currentPayload) {
-      btnImport.disabled = false;
-    }
-  });
-
-  collectionPicker.onChange((value) => {
-    activeDest.collectionID = value ? parseInt(value, 10) : null;
-  });
-
   btnNewCollection.addEventListener("click", async () => {
-    const libraryValue = libraryPicker.getValue();
-    if (!libraryValue) return;
+    if (!selectedLibraryID) return;
 
     const input = { value: "" };
     const check = { value: false };
@@ -553,18 +578,16 @@ function buildImportUI(win: Window, controller: ImportDialogController) {
     }
 
     try {
-      const libraryID = parseInt(libraryValue, 10);
-      const parentValue = collectionPicker.getValue();
       const collection = new Zotero.Collection();
-      collection.libraryID = libraryID;
+      collection.libraryID = selectedLibraryID;
       collection.name = name;
-      if (parentValue) {
-        collection.parentID = parseInt(parentValue, 10);
+      if (selectedCollectionID) {
+        collection.parentID = selectedCollectionID;
       }
       await collection.saveTx();
 
-      activeDest.collectionID = collection.id;
-      populateCollections(libraryID, collection.id);
+      selectedCollectionID = collection.id;
+      populateCollections(selectedLibraryID, collection.id);
       setStatus(`Created collection "${name}".`, "ok");
     } catch (error) {
       setStatus(`Collection error: ${(error as Error).message}`, "err");
@@ -573,7 +596,6 @@ function buildImportUI(win: Window, controller: ImportDialogController) {
 
   btnBrowse.addEventListener("click", async () => {
     try {
-      closePickers();
       const filePicker = Components.classes["@mozilla.org/filepicker;1"].createInstance(
         Components.interfaces.nsIFilePicker,
       );
@@ -589,7 +611,6 @@ function buildImportUI(win: Window, controller: ImportDialogController) {
     }
   });
 
-  win.addEventListener("blur", closePickers);
   populateDestinations();
 }
 
@@ -635,7 +656,109 @@ function clearChildren(node: Node) {
   }
 }
 
-function collectCollectionOptions(collection: any, depth: number, options: PickerOption[]) {
+function chooseOption(
+  doc: Document,
+  title: string,
+  options: OptionItem[],
+  selectedValue: string,
+): Promise<string | null> {
+  return new Promise((resolve) => {
+    const overlay = h(doc, "div", {
+      style: [
+        "position:fixed",
+        "inset:0",
+        "background:rgba(15,23,42,0.28)",
+        "display:flex",
+        "align-items:center",
+        "justify-content:center",
+        "z-index:2000",
+      ].join(";"),
+    });
+    const panel = h(doc, "div", {
+      style: [
+        "width:min(480px, calc(100vw - 48px))",
+        "max-height:min(70vh, 560px)",
+        "display:flex",
+        "flex-direction:column",
+        "gap:10px",
+        "padding:14px",
+        "border-radius:12px",
+        "background:#fff",
+        "box-shadow:0 18px 50px rgba(15,23,42,0.22)",
+      ].join(";"),
+    });
+    const list = h(doc, "div", {
+      style: [
+        "display:flex",
+        "flex-direction:column",
+        "gap:4px",
+        "overflow:auto",
+        "max-height:calc(70vh - 120px)",
+      ].join(";"),
+    });
+
+    const close = (value: string | null) => {
+      overlay.remove();
+      resolve(value);
+    };
+
+    overlay.addEventListener("click", (event) => {
+      if (event.target === overlay) {
+        close(null);
+      }
+    });
+
+    panel.appendChild(h(doc, "div", { style: "font-size:16px;font-weight:700;" }, title));
+    panel.appendChild(
+      h(doc, "div", { style: "font-size:12px;color:#64748b;" }, "Choose a destination."),
+    );
+
+    for (const option of options) {
+      const isSelected = option.value === selectedValue;
+      const item = h(
+        doc,
+        "button",
+        {
+          type: "button",
+          style: [
+            "display:block",
+            "width:100%",
+            "padding:9px 10px",
+            "border:0",
+            "border-radius:8px",
+            `background:${isSelected ? "#eff6ff" : "transparent"}`,
+            `color:${isSelected ? "#1d4ed8" : "#1f2937"}`,
+            `font-weight:${isSelected ? "600" : "400"}`,
+            "text-align:left",
+            "cursor:pointer",
+            "font-size:12px",
+          ].join(";"),
+        },
+        option.label,
+      ) as HTMLButtonElement;
+      item.addEventListener("click", () => close(option.value));
+      list.appendChild(item);
+    }
+
+    const footer = h(
+      doc,
+      "div",
+      { style: "display:flex;justify-content:flex-end;gap:8px;" },
+      (() => {
+        const cancel = makeButton(doc, "Cancel");
+        cancel.addEventListener("click", () => close(null));
+        return cancel;
+      })(),
+    );
+
+    panel.appendChild(list);
+    panel.appendChild(footer);
+    overlay.appendChild(panel);
+    doc.body.appendChild(overlay);
+  });
+}
+
+function collectCollectionOptions(collection: any, depth: number, options: OptionItem[]) {
   const prefix = depth > 0 ? `${"-- ".repeat(depth)}` : "";
   options.push({
     value: String(collection.id),
@@ -651,13 +774,46 @@ function truncate(text: string, max: number): string {
   return text.length > max ? `${text.slice(0, max - 1)}\u2026` : text;
 }
 
-function fieldGroup(doc: Document, label: string, control: HTMLElement) {
+function makeValueBox(doc: Document, text: string) {
+  return h(
+    doc,
+    "div",
+    {
+      style: [
+        "min-width:260px",
+        "padding:8px 10px",
+        "border-radius:6px",
+        "border:1px solid #c4c4c4",
+        "background:#fff",
+        "font-size:12px",
+        "color:#1f2937",
+        "white-space:nowrap",
+        "overflow:hidden",
+        "text-overflow:ellipsis",
+      ].join(";"),
+    },
+    text,
+  );
+}
+
+function fieldGroup(
+  doc: Document,
+  label: string,
+  valueBox: HTMLElement,
+  button: HTMLButtonElement,
+) {
   return h(
     doc,
     "div",
     { style: "display:flex;flex-direction:column;gap:4px;" },
     h(doc, "span", { style: "font-size:12px;color:#475569;" }, `${label}:`),
-    control,
+    h(
+      doc,
+      "div",
+      { style: "display:flex;gap:8px;align-items:center;flex-wrap:wrap;" },
+      valueBox,
+      button,
+    ),
   );
 }
 
@@ -690,182 +846,6 @@ function makeButton(doc: Document, text: string, primary = false) {
     },
     text,
   ) as HTMLButtonElement;
-}
-
-function createPicker(doc: Document, placeholder: string, minWidth: string): PickerControl {
-  const root = h(doc, "div", {
-    style: `position:relative;min-width:${minWidth};`,
-  });
-  const label = h(doc, "span", {
-    style: "flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left;",
-  });
-  const arrow = h(
-    doc,
-    "span",
-    {
-      style: "margin-left:8px;font-size:10px;color:#64748b;flex:none;",
-    },
-    "v",
-  );
-  const trigger = h(
-    doc,
-    "button",
-    {
-      type: "button",
-      style: [
-        "display:flex",
-        "align-items:center",
-        "justify-content:space-between",
-        "gap:8px",
-        "width:100%",
-        "padding:7px 10px",
-        "border-radius:6px",
-        "border:1px solid #c4c4c4",
-        "background:#fff",
-        "font-size:12px",
-        "color:#1f2937",
-        "cursor:pointer",
-      ].join(";"),
-    },
-    label,
-    arrow,
-  ) as HTMLButtonElement;
-  trigger.setAttribute("aria-expanded", "false");
-
-  const menu = h(doc, "div", {
-    style: [
-      "display:none",
-      "position:absolute",
-      "top:calc(100% + 4px)",
-      "left:0",
-      "right:0",
-      "max-height:240px",
-      "overflow:auto",
-      "padding:4px",
-      "background:#fff",
-      "border:1px solid #c4c4c4",
-      "border-radius:8px",
-      "box-shadow:0 10px 30px rgba(15,23,42,0.15)",
-      "z-index:1000",
-    ].join(";"),
-  });
-
-  root.appendChild(trigger);
-  root.appendChild(menu);
-
-  let options: PickerOption[] = [];
-  let value = "";
-  const changeHandlers: Array<(value: string) => void> = [];
-
-  const close = () => {
-    menu.style.display = "none";
-    trigger.setAttribute("aria-expanded", "false");
-  };
-
-  const render = () => {
-    if (!options.some((option) => option.value === value) && options.length) {
-      value = options[0].value;
-    }
-
-    const current = options.find((option) => option.value === value);
-    label.textContent = current?.label || placeholder;
-    label.style.color = current ? "#1f2937" : "#94a3b8";
-
-    Array.from(menu.children).forEach((child) => {
-      const item = child as HTMLButtonElement;
-      const selected = item.dataset.value === value;
-      item.style.backgroundColor = selected ? "#eff6ff" : "transparent";
-      item.style.color = selected ? "#1d4ed8" : "#1f2937";
-      item.style.fontWeight = selected ? "600" : "400";
-    });
-  };
-
-  trigger.addEventListener("click", (event) => {
-    event.stopPropagation();
-    if (trigger.disabled || !options.length) return;
-    const expanded = trigger.getAttribute("aria-expanded") === "true";
-    if (expanded) {
-      close();
-    } else {
-      menu.style.display = "block";
-      trigger.setAttribute("aria-expanded", "true");
-    }
-  });
-
-  doc.addEventListener("click", (event) => {
-    const target = event.target;
-    if (target && root.contains(target as Node)) return;
-    close();
-  });
-
-  return {
-    root,
-    close,
-    getValue: () => value,
-    onChange(handler) {
-      changeHandlers.push(handler);
-    },
-    setDisabled(disabled) {
-      trigger.disabled = disabled;
-      trigger.style.opacity = disabled ? "0.6" : "1";
-      trigger.style.cursor = disabled ? "default" : "pointer";
-      if (disabled) {
-        close();
-      }
-    },
-    setOptions(nextOptions) {
-      options = nextOptions.slice();
-      clearChildren(menu);
-
-      for (const option of options) {
-        const item = h(
-          doc,
-          "button",
-          {
-            type: "button",
-            style: [
-              "display:block",
-              "width:100%",
-              "padding:7px 10px",
-              "border:0",
-              "border-radius:6px",
-              "background:transparent",
-              "text-align:left",
-              "cursor:pointer",
-              "font-size:12px",
-            ].join(";"),
-          },
-          option.label,
-        ) as HTMLButtonElement;
-        item.dataset.value = option.value;
-        item.addEventListener("click", (event) => {
-          event.stopPropagation();
-          value = option.value;
-          render();
-          close();
-          for (const handler of changeHandlers) {
-            handler(value);
-          }
-        });
-        menu.appendChild(item);
-      }
-
-      if (!options.some((option) => option.value === value)) {
-        value = options[0]?.value ?? "";
-      }
-      render();
-    },
-    setValue(nextValue) {
-      if (options.some((option) => option.value === nextValue)) {
-        value = nextValue;
-      } else if (options.length) {
-        value = options[0].value;
-      } else {
-        value = "";
-      }
-      render();
-    },
-  };
 }
 
 function h(

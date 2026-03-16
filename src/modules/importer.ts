@@ -167,17 +167,12 @@ async function importSingleCitation(
     item.setCreators(creators);
   }
 
-  // Save the item
-  await item.saveTx();
-
-  // Add to collection if specified
   if (collectionID) {
-    const collection = Zotero.Collections.get(collectionID);
-    if (collection) {
-      collection.addItem(item.id);
-      await collection.saveTx();
-    }
+    item.addToCollection(collectionID);
   }
+
+  // Save the item, including collection membership
+  await item.saveTx();
 
   return item;
 }

@@ -98,16 +98,12 @@ export async function createLiteratureMapNote(
   const note = new Zotero.Item("note");
   note.libraryID = libraryID ?? Zotero.Libraries.userLibraryID;
   note.setNote(html);
-  await note.saveTx();
 
-  // Add to collection if specified
   if (collectionID) {
-    const collection = Zotero.Collections.get(collectionID);
-    if (collection) {
-      collection.addItem(note.id);
-      await collection.saveTx();
-    }
+    note.addToCollection(collectionID);
   }
+
+  await note.saveTx();
 
   return note;
 }
