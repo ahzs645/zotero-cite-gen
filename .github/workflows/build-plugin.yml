@@ -4,8 +4,11 @@ on:
   push:
   workflow_dispatch:
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -27,16 +30,48 @@ jobs:
       - name: Build plugin
         run: npm run build
 
+      - name: Read plugin version
+        id: version
+        run: |
+          VERSION=$(node --input-type=module -e "import fs from 'node:fs'; console.log(JSON.parse(fs.readFileSync('package.json', 'utf8')).version)")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+
       - name: Upload XPI artifact
         uses: actions/upload-artifact@v4
         with:
-          name: zotero-citation-generator-xpi
+          name: zotero-citation-generator-xpi-${{ steps.version.outputs.version }}
           path: .scaffold/build/zotero-citation-generator.xpi
           if-no-files-found: error
 
       - name: Upload build manifest
         uses: actions/upload-artifact@v4
         with:
-          name: zotero-citation-generator-manifest
+          name: zotero-citation-generator-manifest-${{ steps.version.outputs.version }}
           path: .scaffold/build/addon/manifest.json
           if-no-files-found: error
+
+      - name: Check if release already exists
+        id: release_check
+        if: github.ref == 'refs/heads/main'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view "${{ steps.version.outputs.tag }}" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create GitHub release for new version
+        if: github.ref == 'refs/heads/main' && steps.release_check.outputs.exists == 'false'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ steps.version.outputs.tag }}" \
+            .scaffold/build/zotero-citation-generator.xpi \
+            .scaffold/build/addon/manifest.json \
+            --title "${{ steps.version.outputs.tag }}" \
+            --notes "Automated release for version ${{ steps.version.outputs.version }}." \
+            --target "${GITHUB_SHA}" \
+            --latest
